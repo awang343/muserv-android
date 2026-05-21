@@ -43,6 +43,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun TrackTagsSheet(
     container: AppContainer,
+    libraryId: Long,
     track: Track,
     onDismiss: () -> Unit,
 ) {
@@ -55,7 +56,7 @@ fun TrackTagsSheet(
 
     suspend fun refresh() {
         try {
-            tags = container.api.listTrackTags(track.id)
+            tags = container.api.listTrackTags(libraryId, track.id)
             error = null
         } catch (t: Throwable) {
             error = t.message ?: t.javaClass.simpleName
@@ -110,7 +111,7 @@ fun TrackTagsSheet(
                                     {
                                         scope.launch {
                                             try {
-                                                container.api.removeUserTag(track.id, tag.tag_id)
+                                                container.api.removeUserTag(libraryId, track.id, tag.tag_id)
                                                 refresh()
                                             } catch (t: Throwable) {
                                                 error = t.message ?: t.javaClass.simpleName
@@ -146,7 +147,7 @@ fun TrackTagsSheet(
                         if (parsed != null) {
                             scope.launch {
                                 try {
-                                    container.api.addUserTag(track.id, parsed.first, parsed.second)
+                                    container.api.addUserTag(libraryId, track.id, parsed.first, parsed.second)
                                     input = ""
                                     refresh()
                                 } catch (t: Throwable) {

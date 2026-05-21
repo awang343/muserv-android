@@ -53,7 +53,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-class PlaylistsListViewModel(private val api: MusicApi) : ViewModel() {
+class PlaylistsListViewModel(
+    private val api: MusicApi,
+    private val libraryId: Long,
+) : ViewModel() {
     private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
     val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
 
@@ -65,9 +68,13 @@ class PlaylistsListViewModel(private val api: MusicApi) : ViewModel() {
     }
 
     fun refresh() {
+        if (libraryId <= 0) {
+            _error.value = "no library selected"
+            return
+        }
         viewModelScope.launch {
             try {
-                _playlists.value = api.listPlaylists()
+                _playlists.value = api.listPlaylists(libraryId)
                 _error.value = null
             } catch (t: Throwable) {
                 _error.value = t.message ?: t.javaClass.simpleName
@@ -78,7 +85,7 @@ class PlaylistsListViewModel(private val api: MusicApi) : ViewModel() {
     fun create(name: String, onDone: () -> Unit) {
         viewModelScope.launch {
             try {
-                api.createPlaylist(name)
+                api.createPlaylist(libraryId, name)
                 refresh()
                 onDone()
             } catch (t: Throwable) {
@@ -90,7 +97,7 @@ class PlaylistsListViewModel(private val api: MusicApi) : ViewModel() {
     fun delete(id: Long) {
         viewModelScope.launch {
             try {
-                api.deletePlaylist(id)
+                api.deletePlaylist(libraryId, id)
                 refresh()
             } catch (t: Throwable) {
                 _error.value = t.message ?: t.javaClass.simpleName
@@ -101,7 +108,7 @@ class PlaylistsListViewModel(private val api: MusicApi) : ViewModel() {
     fun rename(id: Long, name: String, onDone: () -> Unit) {
         viewModelScope.launch {
             try {
-                api.renamePlaylist(id, name)
+                api.renamePlaylist(libraryId, id, name)
                 refresh()
                 onDone()
             } catch (t: Throwable) {
@@ -115,10 +122,14 @@ class PlaylistsListViewModel(private val api: MusicApi) : ViewModel() {
 @Composable
 fun PlaylistsListScreen(
     container: AppContainer,
+    libraryId: Long,
     onOpen: (Long) -> Unit,
 ) {
     val vm: PlaylistsListViewModel = viewModel(
-        factory = viewModelFactory { initializer { PlaylistsListViewModel(container.api) } },
+        key = "playlists-$libraryId",
+        factory = viewModelFactory {
+            initializer { PlaylistsListViewModel(container.api, libraryId) }
+        },
     )
     val playlists by vm.playlists.collectAsState()
     val error by vm.error.collectAsState()

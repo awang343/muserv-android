@@ -95,19 +95,24 @@ fun AppRoot(
             }
         },
     ) { padding ->
+        val libraryId = settings?.selectedLibraryId ?: 0L
         NavHost(
             navController = nav,
             startDestination = "songs",
             modifier = Modifier.padding(padding).fillMaxSize(),
         ) {
             composable("songs") {
+                // Keying on libraryId scopes the VM per library — switching
+                // libraries discards the old VM and fetches fresh tracks.
                 val vm: SongsViewModel = viewModel(
+                    key = "songs-$libraryId",
                     factory = viewModelFactory {
-                        initializer { SongsViewModel(container.api) }
+                        initializer { SongsViewModel(container.api, libraryId) }
                     },
                 )
                 SongsScreen(
                     viewModel = vm,
+                    libraryId = libraryId,
                     onPlay = onPlay,
                     onEnqueue = onEnqueue,
                     container = container,
@@ -116,6 +121,7 @@ fun AppRoot(
             composable("playlists") {
                 PlaylistsListScreen(
                     container = container,
+                    libraryId = libraryId,
                     onOpen = { id -> nav.navigate("playlists/$id") },
                 )
             }
@@ -124,6 +130,7 @@ fun AppRoot(
                 if (id != null) {
                     PlaylistDetailScreen(
                         container = container,
+                        libraryId = libraryId,
                         playlistId = id,
                         onPlayPlaylist = onPlayList,
                         onEnqueueTrack = onEnqueue,

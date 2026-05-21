@@ -42,108 +42,118 @@ class MusicApi(private val settings: SettingsRepository) {
         return if (path.startsWith('/')) "$b$path" else "$b/$path"
     }
 
-    suspend fun listTracks(): List<Track> {
+    suspend fun listLibraries(): List<Library> {
         val s = current()
-        return httpClient.get(urlOf(s.serverUrl, "/api/tracks?limit=1000")) {
+        return httpClient.get(urlOf(s.serverUrl, "/api/libraries")) {
             if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
         }.body()
     }
 
-    suspend fun searchTracks(query: String): List<Track> {
+    suspend fun listTracks(libraryId: Long): List<Track> {
         val s = current()
-        return httpClient.get(urlOf(s.serverUrl, "/api/search")) {
+        return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/tracks?limit=1000")) {
+            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+        }.body()
+    }
+
+    suspend fun searchTracks(libraryId: Long, query: String): List<Track> {
+        val s = current()
+        return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/search")) {
             if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
             parameter("q", query)
         }.body()
     }
 
-    suspend fun listPlaylists(): List<Playlist> {
+    suspend fun listPlaylists(libraryId: Long): List<Playlist> {
         val s = current()
-        return httpClient.get(urlOf(s.serverUrl, "/api/playlists")) {
+        return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists")) {
             if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
         }.body()
     }
 
-    suspend fun createPlaylist(name: String): Playlist {
+    suspend fun createPlaylist(libraryId: Long, name: String): Playlist {
         val s = current()
-        return httpClient.post(urlOf(s.serverUrl, "/api/playlists")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
-            contentType(ContentType.Application.Json)
-            setBody(NameBody(name))
-        }.body()
-    }
-
-    suspend fun renamePlaylist(id: Long, name: String): Playlist {
-        val s = current()
-        return httpClient.patch(urlOf(s.serverUrl, "/api/playlists/$id")) {
+        return httpClient.post(urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists")) {
             if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
             contentType(ContentType.Application.Json)
             setBody(NameBody(name))
         }.body()
     }
 
-    suspend fun deletePlaylist(id: Long) {
+    suspend fun renamePlaylist(libraryId: Long, id: Long, name: String): Playlist {
         val s = current()
-        httpClient.delete(urlOf(s.serverUrl, "/api/playlists/$id")) {
+        return httpClient.patch(urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists/$id")) {
+            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            contentType(ContentType.Application.Json)
+            setBody(NameBody(name))
+        }.body()
+    }
+
+    suspend fun deletePlaylist(libraryId: Long, id: Long) {
+        val s = current()
+        httpClient.delete(urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists/$id")) {
             if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
         }
     }
 
-    suspend fun getPlaylistTracks(id: Long): List<PlaylistTrack> {
+    suspend fun getPlaylistTracks(libraryId: Long, id: Long): List<PlaylistTrack> {
         val s = current()
-        return httpClient.get(urlOf(s.serverUrl, "/api/playlists/$id/tracks")) {
+        return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists/$id/tracks")) {
             if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
         }.body()
     }
 
-    suspend fun addToPlaylist(playlistId: Long, trackId: Long) {
+    suspend fun addToPlaylist(libraryId: Long, playlistId: Long, trackId: Long) {
         val s = current()
-        httpClient.post(urlOf(s.serverUrl, "/api/playlists/$playlistId/tracks")) {
+        httpClient.post(urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists/$playlistId/tracks")) {
             if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
             contentType(ContentType.Application.Json)
             setBody(TrackIdBody(trackId))
         }
     }
 
-    suspend fun removeFromPlaylist(playlistId: Long, trackId: Long) {
+    suspend fun removeFromPlaylist(libraryId: Long, playlistId: Long, trackId: Long) {
         val s = current()
-        httpClient.delete(urlOf(s.serverUrl, "/api/playlists/$playlistId/tracks/$trackId")) {
+        httpClient.delete(
+            urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists/$playlistId/tracks/$trackId")
+        ) {
             if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
         }
     }
 
-    suspend fun setPlaylistTracks(playlistId: Long, trackIds: List<Long>) {
+    suspend fun setPlaylistTracks(libraryId: Long, playlistId: Long, trackIds: List<Long>) {
         val s = current()
-        httpClient.put(urlOf(s.serverUrl, "/api/playlists/$playlistId/tracks")) {
+        httpClient.put(urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists/$playlistId/tracks")) {
             if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
             contentType(ContentType.Application.Json)
             setBody(TrackIdsBody(trackIds))
         }
     }
 
-    suspend fun listTrackTags(trackId: Long): List<TrackTag> {
+    suspend fun listTrackTags(libraryId: Long, trackId: Long): List<TrackTag> {
         val s = current()
-        return httpClient.get(urlOf(s.serverUrl, "/api/tracks/$trackId/tags")) {
+        return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/tracks/$trackId/tags")) {
             if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
         }.body()
     }
 
-    suspend fun addUserTag(trackId: Long, namespace: String, value: String) {
+    suspend fun addUserTag(libraryId: Long, trackId: Long, namespace: String, value: String) {
         val s = current()
-        httpClient.post(urlOf(s.serverUrl, "/api/tracks/$trackId/tags")) {
+        httpClient.post(urlOf(s.serverUrl, "/api/libraries/$libraryId/tracks/$trackId/tags")) {
             if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
             contentType(ContentType.Application.Json)
             setBody(TagBody(namespace, value))
         }
     }
 
-    suspend fun removeUserTag(trackId: Long, tagId: Long) {
+    suspend fun removeUserTag(libraryId: Long, trackId: Long, tagId: Long) {
         val s = current()
-        httpClient.delete(urlOf(s.serverUrl, "/api/tracks/$trackId/tags/$tagId")) {
+        httpClient.delete(urlOf(s.serverUrl, "/api/libraries/$libraryId/tracks/$trackId/tags/$tagId")) {
             if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
         }
     }
 
+    /** Stream URL doesn't require a library id — track ids are globally unique. */
     suspend fun streamUrlFor(trackId: Long): String {
         val s = current()
         return urlOf(s.serverUrl, "/api/tracks/$trackId/stream")
@@ -154,16 +164,16 @@ class MusicApi(private val settings: SettingsRepository) {
         return if (s.authToken.isBlank()) null else "Bearer ${s.authToken}"
     }
 
-    suspend fun triggerScan(): ScanState {
+    suspend fun triggerScan(libraryId: Long): ScanState {
         val s = current()
-        return httpClient.post(urlOf(s.serverUrl, "/api/scans")) {
+        return httpClient.post(urlOf(s.serverUrl, "/api/libraries/$libraryId/scans")) {
             if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
         }.body()
     }
 
-    suspend fun getScanStatus(): ScanState {
+    suspend fun getScanStatus(libraryId: Long): ScanState {
         val s = current()
-        return httpClient.get(urlOf(s.serverUrl, "/api/scans")) {
+        return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/scans")) {
             if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
         }.body()
     }

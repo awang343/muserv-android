@@ -3,8 +3,16 @@ package com.musiclib.data
 import kotlinx.serialization.Serializable
 
 @Serializable
+data class Library(
+    val id: Long,
+    val name: String,
+    val root_path: String,
+)
+
+@Serializable
 data class Track(
     val id: Long,
+    val library_id: Long = 0,
     val path: String,
     val title: String? = null,
     val album: String? = null,
@@ -27,6 +35,7 @@ data class Track(
 @Serializable
 data class Playlist(
     val id: Long,
+    val library_id: Long = 0,
     val name: String,
     val description: String? = null,
     val track_count: Long = 0,

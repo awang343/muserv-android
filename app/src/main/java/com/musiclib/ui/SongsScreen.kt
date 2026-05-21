@@ -64,6 +64,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SongsScreen(
     viewModel: SongsViewModel,
+    libraryId: Long,
     onPlay: (Track) -> Unit,
     onEnqueue: (Track) -> Unit,
     container: AppContainer,
@@ -92,7 +93,7 @@ fun SongsScreen(
             searchLoading = true
             searchError = null
             try {
-                searchResults = container.api.searchTracks(q)
+                searchResults = container.api.searchTracks(libraryId, q)
             } catch (t: Throwable) {
                 searchError = t.message ?: t.javaClass.simpleName
                 searchResults = null
@@ -261,6 +262,7 @@ fun SongsScreen(
     tagsFor?.let { track ->
         TrackTagsSheet(
             container = container,
+            libraryId = libraryId,
             track = track,
             onDismiss = { tagsFor = null },
         )
@@ -280,10 +282,11 @@ fun SongsScreen(
     pickPlaylistFor?.let { track ->
         PickPlaylistDialog(
             container = container,
+            libraryId = libraryId,
             onPick = { p ->
                 scope.launch {
                     try {
-                        container.api.addToPlaylist(p.id, track.id)
+                        container.api.addToPlaylist(libraryId, p.id, track.id)
                     } catch (_: Throwable) {
                         // Silent fail; user can verify in Playlists tab.
                     }
@@ -391,6 +394,7 @@ private fun Modifier.combinedClickableForBottomSheet(onClick: () -> Unit): Modif
 @Composable
 private fun PickPlaylistDialog(
     container: AppContainer,
+    libraryId: Long,
     onPick: (Playlist) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -400,7 +404,7 @@ private fun PickPlaylistDialog(
 
     LaunchedEffect(Unit) {
         try {
-            playlists = container.api.listPlaylists()
+            playlists = container.api.listPlaylists(libraryId)
         } catch (t: Throwable) {
             error = t.message ?: t.javaClass.simpleName
         } finally {

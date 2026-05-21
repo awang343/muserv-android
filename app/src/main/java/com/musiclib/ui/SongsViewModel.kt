@@ -15,7 +15,10 @@ sealed interface SongsUiState {
     data class Failed(val message: String) : SongsUiState
 }
 
-class SongsViewModel(private val api: MusicApi) : ViewModel() {
+class SongsViewModel(
+    private val api: MusicApi,
+    private val libraryId: Long,
+) : ViewModel() {
 
     private val _state = MutableStateFlow<SongsUiState>(SongsUiState.Loading)
     val state: StateFlow<SongsUiState> = _state.asStateFlow()
@@ -26,9 +29,13 @@ class SongsViewModel(private val api: MusicApi) : ViewModel() {
 
     fun refresh() {
         _state.value = SongsUiState.Loading
+        if (libraryId <= 0) {
+            _state.value = SongsUiState.Failed("no library selected")
+            return
+        }
         viewModelScope.launch {
             _state.value = try {
-                SongsUiState.Ready(api.listTracks())
+                SongsUiState.Ready(api.listTracks(libraryId))
             } catch (t: Throwable) {
                 SongsUiState.Failed(t.message ?: t.javaClass.simpleName)
             }

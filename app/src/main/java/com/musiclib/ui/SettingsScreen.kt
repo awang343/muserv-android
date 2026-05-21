@@ -1,7 +1,9 @@
 package com.musiclib.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,6 +15,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,8 +30,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.musiclib.data.Library
 import com.musiclib.data.MusicApi
 import com.musiclib.data.ScanState
 import com.musiclib.data.Settings
@@ -48,8 +53,14 @@ fun SettingsScreen(
 ) {
     var url by rememberSaveable { mutableStateOf("") }
     var token by rememberSaveable { mutableStateOf("") }
+    var selectedLibraryName by rememberSaveable { mutableStateOf("") }
+    var selectedLibraryId by rememberSaveable { mutableStateOf(0L) }
     var initialized by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    var libraries by remember { mutableStateOf<List<Library>>(emptyList()) }
+    var libsLoading by remember { mutableStateOf(false) }
+    var libsError by remember { mutableStateOf<String?>(null) }
 
     var scanState by remember { mutableStateOf<ScanState?>(null) }
     var scanMessage by remember { mutableStateOf<String?>(null) }
@@ -60,6 +71,8 @@ fun SettingsScreen(
         val saved = repo.flow.first()
         url = saved.serverUrl
         token = saved.authToken
+        selectedLibraryName = saved.selectedLibraryName
+        selectedLibraryId = saved.selectedLibraryId
         initialized = true
     }
 
@@ -67,13 +80,44 @@ fun SettingsScreen(
         onDispose { pollJob?.cancel() }
     }
 
-    fun startPolling() {
+    suspend fun refreshLibraries() {
+        libsLoading = true
+        libsError = null
+        try {
+            val list = api.listLibraries()
+            libraries = list
+            // Reconcile current selection.
+            val match = list.firstOrNull { it.name == selectedLibraryName }
+                ?: list.firstOrNull { it.id == selectedLibraryId }
+                ?: list.firstOrNull()
+            if (match != null) {
+                selectedLibraryName = match.name
+                selectedLibraryId = match.id
+            } else {
+                selectedLibraryName = ""
+                selectedLibraryId = 0L
+            }
+        } catch (t: Throwable) {
+            libsError = t.message ?: t.javaClass.simpleName
+        } finally {
+            libsLoading = false
+        }
+    }
+
+    // Fetch libraries whenever the URL/token changes (after they're loaded).
+    LaunchedEffect(initialized, url, token) {
+        if (!initialized) return@LaunchedEffect
+        if (url.isBlank()) return@LaunchedEffect
+        refreshLibraries()
+    }
+
+    fun startPolling(libraryId: Long) {
         pollJob?.cancel()
         pollJob = scope.launch {
             while (true) {
                 delay(1500)
                 val s = try {
-                    api.getScanStatus()
+                    api.getScanStatus(libraryId)
                 } catch (e: Throwable) {
                     scanMessage = "status failed: ${e.message}"
                     return@launch
@@ -127,11 +171,18 @@ fun SettingsScreen(
             Button(
                 onClick = {
                     scope.launch {
-                        repo.save(Settings(url, token))
+                        repo.save(
+                            Settings(
+                                serverUrl = url,
+                                authToken = token,
+                                selectedLibraryName = selectedLibraryName,
+                                selectedLibraryId = selectedLibraryId,
+                            )
+                        )
                         onSaved()
                     }
                 },
-                enabled = url.isNotBlank(),
+                enabled = url.isNotBlank() && selectedLibraryId > 0,
             ) { Text("Save") }
 
             Spacer(Modifier.height(8.dp))
@@ -139,31 +190,86 @@ fun SettingsScreen(
             Spacer(Modifier.height(8.dp))
 
             Text("Library", style = MaterialTheme.typography.titleMedium)
+            when {
+                libsLoading -> Text("Loading libraries…")
+                libsError != null && libraries.isEmpty() ->
+                    Text("Couldn't load libraries: $libsError")
+                libraries.isEmpty() ->
+                    Text(
+                        "No libraries on this server. Add a [[library]] in the server config.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                else -> Column {
+                    libraries.forEach { lib ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedLibraryName = lib.name
+                                    selectedLibraryId = lib.id
+                                }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = lib.id == selectedLibraryId,
+                                onClick = {
+                                    selectedLibraryName = lib.name
+                                    selectedLibraryId = lib.id
+                                },
+                            )
+                            Column(modifier = Modifier.padding(start = 4.dp)) {
+                                Text(lib.name, style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    lib.root_path,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(8.dp))
+
             val running = scanState?.running == true
             OutlinedButton(
                 onClick = {
                     scanMessage = null
+                    val lib = selectedLibraryId
+                    if (lib <= 0) {
+                        scanMessage = "pick a library first"
+                        return@OutlinedButton
+                    }
                     scope.launch {
                         try {
-                            val s = api.triggerScan()
+                            val s = api.triggerScan(lib)
                             scanState = s
                             scanMessage = if (s.running) "rescanning…" else "scan triggered"
-                            if (s.running) startPolling()
+                            if (s.running) startPolling(lib)
                         } catch (e: Throwable) {
                             try {
-                                val s = api.getScanStatus()
+                                val s = api.getScanStatus(lib)
                                 scanState = s
                                 scanMessage = if (s.running) "already running" else "scan: ${e.message}"
-                                if (s.running) startPolling()
+                                if (s.running) startPolling(lib)
                             } catch (_: Throwable) {
                                 scanMessage = "scan: ${e.message}"
                             }
                         }
                     }
                 },
-                enabled = !running && url.isNotBlank(),
+                enabled = !running && url.isNotBlank() && selectedLibraryId > 0,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (running) "Rescanning…" else "Rescan library") }
+            ) {
+                Text(
+                    if (running) "Rescanning $selectedLibraryName…"
+                    else "Rescan ${selectedLibraryName.ifBlank { "library" }}"
+                )
+            }
 
             scanMessage?.let {
                 Text(it, style = MaterialTheme.typography.bodyMedium)

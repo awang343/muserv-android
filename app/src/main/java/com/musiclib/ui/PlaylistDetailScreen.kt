@@ -56,6 +56,7 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 
 class PlaylistDetailViewModel(
     private val api: MusicApi,
+    private val libraryId: Long,
     private val playlistId: Long,
 ) : ViewModel() {
     private val _tracks = MutableStateFlow<List<PlaylistTrack>>(emptyList())
@@ -67,9 +68,13 @@ class PlaylistDetailViewModel(
     init { refresh() }
 
     fun refresh() {
+        if (libraryId <= 0) {
+            _error.value = "no library selected"
+            return
+        }
         viewModelScope.launch {
             try {
-                _tracks.value = api.getPlaylistTracks(playlistId)
+                _tracks.value = api.getPlaylistTracks(libraryId, playlistId)
                 _error.value = null
             } catch (t: Throwable) {
                 _error.value = t.message ?: t.javaClass.simpleName
@@ -80,7 +85,7 @@ class PlaylistDetailViewModel(
     fun removeTrack(trackId: Long) {
         viewModelScope.launch {
             try {
-                api.removeFromPlaylist(playlistId, trackId)
+                api.removeFromPlaylist(libraryId, playlistId, trackId)
                 refresh()
             } catch (t: Throwable) {
                 _error.value = t.message ?: t.javaClass.simpleName
@@ -102,7 +107,7 @@ class PlaylistDetailViewModel(
         val snapshot = _tracks.value
         viewModelScope.launch {
             try {
-                api.setPlaylistTracks(playlistId, snapshot.map { it.track_id })
+                api.setPlaylistTracks(libraryId, playlistId, snapshot.map { it.track_id })
             } catch (t: Throwable) {
                 _error.value = t.message ?: t.javaClass.simpleName
                 refresh()
@@ -115,15 +120,16 @@ class PlaylistDetailViewModel(
 @Composable
 fun PlaylistDetailScreen(
     container: AppContainer,
+    libraryId: Long,
     playlistId: Long,
     onPlayPlaylist: (tracks: List<Track>, startIndex: Int) -> Unit,
     onEnqueueTrack: (Track) -> Unit,
     onBack: () -> Unit,
 ) {
     val vm: PlaylistDetailViewModel = viewModel(
-        key = "playlist-$playlistId",
+        key = "playlist-$libraryId-$playlistId",
         factory = viewModelFactory {
-            initializer { PlaylistDetailViewModel(container.api, playlistId) }
+            initializer { PlaylistDetailViewModel(container.api, libraryId, playlistId) }
         },
     )
     val tracks by vm.tracks.collectAsState()
