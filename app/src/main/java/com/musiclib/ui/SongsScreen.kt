@@ -2,46 +2,34 @@ package com.musiclib.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.LocalOffer
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -56,7 +44,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.musiclib.data.AppContainer
-import com.musiclib.data.Playlist
 import com.musiclib.data.Track
 import kotlinx.coroutines.launch
 
@@ -67,6 +54,7 @@ fun SongsScreen(
     libraryId: Long,
     onPlay: (Track) -> Unit,
     onEnqueue: (Track) -> Unit,
+    onEnqueueAll: (List<Track>) -> Unit,
     container: AppContainer,
 ) {
     val state by viewModel.state.collectAsState()
@@ -81,7 +69,7 @@ fun SongsScreen(
     var searchLoading by remember { mutableStateOf(false) }
     var searchError by remember { mutableStateOf<String?>(null) }
 
-    var currentSort by remember { mutableStateOf(SortKey.DEFAULT) }
+    var currentSort by remember { mutableStateOf(SortKey.ADDED_AT) }
     var sortOpen by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
@@ -147,6 +135,17 @@ fun SongsScreen(
                         IconButton(onClick = { sortOpen = true }) {
                             Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
                         }
+                        IconButton(
+                            onClick = {
+                                val s = state
+                                if (s is SongsUiState.Ready) {
+                                    onEnqueueAll(s.tracks.sortedWith(comparatorFor(currentSort)))
+                                }
+                            },
+                            enabled = (state as? SongsUiState.Ready)?.tracks?.isNotEmpty() == true,
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = "Add all to queue")
+                        }
                         IconButton(onClick = { searchMode = true }) {
                             Icon(Icons.Default.Search, contentDescription = "Tag search")
                         }
@@ -186,6 +185,7 @@ fun SongsScreen(
                             }
                             TrackList(
                                 tracks = sortedResults,
+                                sortKey = currentSort,
                                 onPlay = onPlay,
                                 onLongPress = { actionFor = it },
                             )
@@ -226,6 +226,7 @@ fun SongsScreen(
                             }
                             TrackList(
                                 tracks = visible,
+                                sortKey = currentSort,
                                 onPlay = onPlay,
                                 onLongPress = { actionFor = it },
                             )
@@ -283,6 +284,7 @@ fun SongsScreen(
         PickPlaylistDialog(
             container = container,
             libraryId = libraryId,
+            trackId = track.id,
             onPick = { p ->
                 scope.launch {
                     try {
@@ -303,10 +305,15 @@ fun SongsScreen(
 @Composable
 private fun TrackList(
     tracks: List<Track>,
+    sortKey: SortKey,
     onPlay: (Track) -> Unit,
     onLongPress: (Track) -> Unit,
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
+    val lazyState = rememberLazyListState()
+    LaunchedEffect(sortKey) {
+        lazyState.scrollToItem(0)
+    }
+    LazyColumn(state = lazyState, modifier = Modifier.fillMaxSize()) {
         items(tracks, key = { it.id }) { t ->
             TrackRow(t, onPlay = onPlay, onLongPress = onLongPress)
             HorizontalDivider()
@@ -341,181 +348,4 @@ private fun TrackRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TrackActionSheet(
-    track: Track,
-    onDismiss: () -> Unit,
-    onPlay: () -> Unit,
-    onEnqueue: () -> Unit,
-    onAddToPlaylist: () -> Unit,
-    onOpenTags: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState()
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
-            Text(
-                track.displayTitle,
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                "${track.displayArtist}  —  ${track.displayAlbum}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            ActionItem(Icons.Default.PlayArrow, "Play now", onPlay)
-            ActionItem(Icons.Default.Add, "Add to queue", onEnqueue)
-            ActionItem(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to playlist", onAddToPlaylist)
-            ActionItem(Icons.Default.LocalOffer, "Tags", onOpenTags)
-        }
-    }
-}
-
-@Composable
-private fun ActionItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
-    ListItem(
-        headlineContent = { Text(label) },
-        leadingContent = { Icon(icon, contentDescription = null) },
-        modifier = Modifier.combinedClickableForBottomSheet(onClick),
-    )
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-private fun Modifier.combinedClickableForBottomSheet(onClick: () -> Unit): Modifier =
-    this.combinedClickable(onClick = onClick)
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PickPlaylistDialog(
-    container: AppContainer,
-    libraryId: Long,
-    onPick: (Playlist) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var playlists by remember { mutableStateOf<List<Playlist>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(Unit) {
-        try {
-            playlists = container.api.listPlaylists(libraryId)
-        } catch (t: Throwable) {
-            error = t.message ?: t.javaClass.simpleName
-        } finally {
-            loading = false
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add to playlist") },
-        text = {
-            when {
-                loading -> Text("Loading…")
-                error != null -> Text("Couldn't load: $error")
-                playlists.isEmpty() -> Text("No playlists yet — create one in the Playlists tab.")
-                else -> Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    playlists.forEach { p ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .combinedClickableForBottomSheet { onPick(p) }
-                                .padding(vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(p.name, modifier = Modifier.weight(1f))
-                            Text(
-                                "${p.track_count}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
-}
-
-enum class SortKey(val label: String) {
-    DEFAULT("Default (artist / album / track)"),
-    TITLE("Title (A–Z)"),
-    ARTIST("Artist (A–Z)"),
-    ALBUM("Album (A–Z)"),
-    DURATION("Duration (shortest first)"),
-    YEAR("Year (newest first)"),
-    ADDED_AT("Date added (newest first)"),
-}
-
-private fun comparatorFor(key: SortKey): Comparator<Track> = when (key) {
-    SortKey.DEFAULT -> compareBy(
-        { (it.album_artist ?: "").lowercase() },
-        { (it.album ?: "").lowercase() },
-        { it.disc_no ?: 0 },
-        { it.track_no ?: 0 },
-        { it.displayTitle.lowercase() },
-    )
-    SortKey.TITLE -> compareBy { it.displayTitle.lowercase() }
-    SortKey.ARTIST -> compareBy(
-        { it.displayArtist.lowercase() },
-        { it.displayAlbum.lowercase() },
-        { it.disc_no ?: 0 },
-        { it.track_no ?: 0 },
-    )
-    SortKey.ALBUM -> compareBy(
-        { it.displayAlbum.lowercase() },
-        { it.disc_no ?: 0 },
-        { it.track_no ?: 0 },
-    )
-    SortKey.DURATION -> compareBy { it.duration_ms ?: Long.MAX_VALUE }
-    SortKey.YEAR -> compareByDescending<Track> { it.year ?: Long.MIN_VALUE }
-        .thenBy { it.displayAlbum.lowercase() }
-        .thenBy { it.disc_no ?: 0 }
-        .thenBy { it.track_no ?: 0 }
-    SortKey.ADDED_AT -> compareByDescending { it.added_at }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SortDialog(
-    current: SortKey,
-    onPick: (SortKey) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Sort by") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                SortKey.entries.forEach { k ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .combinedClickableForBottomSheet { onPick(k) }
-                            .padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(
-                            selected = k == current,
-                            onClick = { onPick(k) },
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(k.label)
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-    )
 }

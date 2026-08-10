@@ -49,6 +49,7 @@ fun AppRoot(
     onPlay: (Track) -> Unit,
     onPlayList: (tracks: List<Track>, startIndex: Int) -> Unit,
     onEnqueue: (Track) -> Unit,
+    onEnqueueAll: (List<Track>) -> Unit,
 ) {
     val nav = rememberNavController()
     val settings by container.settings.flow.collectAsState(initial = null)
@@ -95,15 +96,17 @@ fun AppRoot(
             }
         },
     ) { padding ->
-        val libraryId = settings?.selectedLibraryId ?: 0L
         NavHost(
             navController = nav,
             startDestination = "songs",
             modifier = Modifier.padding(padding).fillMaxSize(),
         ) {
             composable("songs") {
-                // Keying on libraryId scopes the VM per library — switching
-                // libraries discards the old VM and fetches fresh tracks.
+                // Each destination collects settings independently so the
+                // current libraryId is always fresh on recomposition, not a
+                // value captured at NavHost construction time.
+                val s by container.settings.flow.collectAsState(initial = null)
+                val libraryId = s?.selectedLibraryId ?: 0L
                 val vm: SongsViewModel = viewModel(
                     key = "songs-$libraryId",
                     factory = viewModelFactory {
@@ -115,10 +118,13 @@ fun AppRoot(
                     libraryId = libraryId,
                     onPlay = onPlay,
                     onEnqueue = onEnqueue,
+                    onEnqueueAll = onEnqueueAll,
                     container = container,
                 )
             }
             composable("playlists") {
+                val s by container.settings.flow.collectAsState(initial = null)
+                val libraryId = s?.selectedLibraryId ?: 0L
                 PlaylistsListScreen(
                     container = container,
                     libraryId = libraryId,
@@ -128,6 +134,8 @@ fun AppRoot(
             composable("playlists/{id}") { entry ->
                 val id = entry.arguments?.getString("id")?.toLongOrNull()
                 if (id != null) {
+                    val s by container.settings.flow.collectAsState(initial = null)
+                    val libraryId = s?.selectedLibraryId ?: 0L
                     PlaylistDetailScreen(
                         container = container,
                         libraryId = libraryId,

@@ -103,6 +103,15 @@ class MusicApi(private val settings: SettingsRepository) {
         }.body()
     }
 
+    suspend fun playlistsContainingTrack(libraryId: Long, trackId: Long): List<Long> {
+        val s = current()
+        return httpClient.get(
+            urlOf(s.serverUrl, "/api/libraries/$libraryId/tracks/$trackId/playlists")
+        ) {
+            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+        }.body()
+    }
+
     suspend fun addToPlaylist(libraryId: Long, playlistId: Long, trackId: Long) {
         val s = current()
         httpClient.post(urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists/$playlistId/tracks")) {

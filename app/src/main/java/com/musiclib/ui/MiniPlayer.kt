@@ -35,6 +35,8 @@ fun MiniPlayer(player: PlayerHolder) {
     val current by player.current.collectAsState()
     val isPlaying by player.isPlaying.collectAsState()
     val repeat by player.repeat.collectAsState()
+    val positionMs by player.positionMs.collectAsState()
+    val durationMs by player.durationMs.collectAsState()
 
     if (current == null) return
 
@@ -63,6 +65,14 @@ fun MiniPlayer(player: PlayerHolder) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (durationMs > 0) {
+                Text(
+                    "${formatDuration(positionMs)} / ${formatDuration(durationMs)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
         }
         IconButton(onClick = { player.cycleRepeat() }) {
             val icon = when (repeat) {
@@ -86,4 +96,12 @@ fun MiniPlayer(player: PlayerHolder) {
             Icon(Icons.Default.SkipNext, contentDescription = "Next", modifier = Modifier.size(26.dp))
         }
     }
+}
+
+private fun formatDuration(ms: Long): String {
+    val totalSeconds = ms / 1000
+    val h = totalSeconds / 3600
+    val m = (totalSeconds % 3600) / 60
+    val s = totalSeconds % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }

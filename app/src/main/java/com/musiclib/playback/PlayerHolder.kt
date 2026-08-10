@@ -1,13 +1,20 @@
 package com.musiclib.playback
 
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.session.MediaController
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 /** Compact info pulled out of a [MediaItem] for UI. */
 data class QueueItem(
@@ -42,16 +49,28 @@ class PlayerHolder {
     private val _repeat = MutableStateFlow(Player.REPEAT_MODE_OFF)
     val repeat: StateFlow<Int> = _repeat.asStateFlow()
 
+    private val _positionMs = MutableStateFlow(0L)
+    val positionMs: StateFlow<Long> = _positionMs.asStateFlow()
+
+    private val _durationMs = MutableStateFlow(0L)
+    val durationMs: StateFlow<Long> = _durationMs.asStateFlow()
+
+    private val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
+    private var positionJob: Job? = null
+
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             _isPlaying.value = isPlaying
+            syncPosition()
         }
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             syncCurrent()
+            syncPosition()
         }
         override fun onTimelineChanged(timeline: Timeline, reason: Int) {
             syncQueue()
             syncCurrent()
+            syncPosition()
         }
         override fun onRepeatModeChanged(repeatMode: Int) {
             _repeat.value = repeatMode
@@ -66,11 +85,24 @@ class PlayerHolder {
         _repeat.value = c.repeatMode
         syncQueue()
         syncCurrent()
+        syncPosition()
+        positionJob = scope.launch {
+            while (true) {
+                delay(500)
+                if (controller?.isPlaying == true) {
+                    syncPosition()
+                }
+            }
+        }
     }
 
     fun detach() {
+        positionJob?.cancel()
+        positionJob = null
         controller?.removeListener(listener)
         controller = null
+        _positionMs.value = 0L
+        _durationMs.value = 0L
     }
 
     fun playNow(item: MediaItem) {
@@ -95,6 +127,25 @@ class PlayerHolder {
         }
         if (alreadyQueued) return
         c.addMediaItem(item)
+    }
+
+    /** Appends every item to the queue (deduped, preserves whatever is already playing). */
+    fun enqueueAll(items: List<MediaItem>) {
+        val c = controller ?: return
+        if (items.isEmpty()) return
+        val seen = mutableSetOf<String>()
+        val deduped = items.filter { seen.add(it.mediaId) }
+        deduped.forEach { itemsById[it.mediaId] = it }
+        if (c.mediaItemCount == 0) {
+            c.setMediaItems(deduped, 0, 0L)
+            c.prepare()
+            c.play()
+            return
+        }
+        val existingIds = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId }.toSet()
+        val toAdd = deduped.filter { it.mediaId !in existingIds }
+        if (toAdd.isEmpty()) return
+        c.addMediaItems(toAdd)
     }
 
     fun playFromList(items: List<MediaItem>, startIndex: Int = 0) {
@@ -193,9 +244,21 @@ class PlayerHolder {
         _current.value = c.getMediaItemAt(idx).toQueueItem(idx)
     }
 
+    private fun syncPosition() {
+        val c = controller ?: run {
+            _positionMs.value = 0L
+            _durationMs.value = 0L
+            return
+        }
+        _positionMs.value = c.currentPosition.coerceAtLeast(0L)
+        val d = c.duration
+        _durationMs.value = if (d == C.TIME_UNSET || d < 0) 0L else d
+    }
+
     private fun syncQueue() {
         val c = controller ?: run {
             _queue.value = emptyList()
+            itemsById.clear()
             return
         }
         val out = ArrayList<QueueItem>(c.mediaItemCount)
@@ -203,6 +266,9 @@ class PlayerHolder {
             out.add(c.getMediaItemAt(i).toQueueItem(i))
         }
         _queue.value = out
+        // Drop cached MediaItems that fell out of the timeline (e.g. via
+        // removeFromQueue) so this map doesn't grow unbounded over a session.
+        itemsById.keys.retainAll(out.mapTo(mutableSetOf()) { it.mediaId })
     }
 }
 

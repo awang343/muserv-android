@@ -54,6 +54,12 @@ class MainActivity : ComponentActivity() {
                             player.enqueue(item)
                         }
                     },
+                    onEnqueueAll = { tracks ->
+                        lifecycleScope.launch {
+                            val items = tracks.map { mediaItem(it, api) }
+                            player.enqueueAll(items)
+                        }
+                    },
                 )
             }
         }
