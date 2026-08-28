@@ -172,20 +172,6 @@ class MusicApi(private val settings: SettingsRepository) {
         return if (s.authToken.isBlank()) null else "Bearer ${s.authToken}"
     }
 
-    suspend fun triggerImport(libraryId: Long): ImportState {
-        val s = current()
-        return httpClient.post(urlOf(s.serverUrl, "/api/libraries/$libraryId/import")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
-        }.body()
-    }
-
-    suspend fun getImportStatus(libraryId: Long): ImportState {
-        val s = current()
-        return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/import")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
-        }.body()
-    }
-
     suspend fun listDownloaders(libraryId: Long): List<DownloaderInfo> {
         val s = current()
         return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/downloaders")) {

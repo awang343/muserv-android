@@ -51,7 +51,7 @@ import com.musiclib.data.DownloaderJob
 fun DownloadersScreen(
     container: AppContainer,
     libraryId: Long,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
 ) {
     val vm: DownloadersViewModel = viewModel(
         key = "downloaders-$libraryId",
@@ -74,8 +74,10 @@ fun DownloadersScreen(
             TopAppBar(
                 title = { Text("Downloaders") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
                     }
                 },
             )

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
@@ -39,6 +40,7 @@ private val TABS = listOf(
     TabItem("songs", "Songs", Icons.Default.MusicNote),
     TabItem("playlists", "Playlists", Icons.Default.LibraryMusic),
     TabItem("queue", "Queue", Icons.AutoMirrored.Filled.PlaylistPlay),
+    TabItem("downloaders", "Downloaders", Icons.Default.Download),
     TabItem("settings", "Settings", Icons.Default.Settings),
 )
 
@@ -161,7 +163,6 @@ fun AppRoot(
                         }
                     },
                     onBack = null,
-                    onOpenDownloaders = { nav.navigate("downloaders") },
                 )
             }
             composable("downloaders") {
@@ -170,7 +171,6 @@ fun AppRoot(
                 DownloadersScreen(
                     container = container,
                     libraryId = libraryId,
-                    onBack = { nav.popBackStack() },
                 )
             }
         }
