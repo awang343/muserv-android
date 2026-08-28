@@ -173,16 +173,44 @@ class MusicApi(private val settings: SettingsRepository) {
         return if (s.authToken.isBlank()) null else "Bearer ${s.authToken}"
     }
 
-    suspend fun triggerScan(libraryId: Long): ScanState {
+    suspend fun triggerImport(libraryId: Long): ImportState {
         val s = current()
-        return httpClient.post(urlOf(s.serverUrl, "/api/libraries/$libraryId/scans")) {
+        return httpClient.post(urlOf(s.serverUrl, "/api/libraries/$libraryId/import")) {
             if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
         }.body()
     }
 
-    suspend fun getScanStatus(libraryId: Long): ScanState {
+    suspend fun getImportStatus(libraryId: Long): ImportState {
         val s = current()
-        return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/scans")) {
+        return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/import")) {
+            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+        }.body()
+    }
+
+    suspend fun listDownloaders(libraryId: Long): List<DownloaderInfo> {
+        val s = current()
+        return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/downloaders")) {
+            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+        }.body()
+    }
+
+    suspend fun runDownloader(libraryId: Long, name: String, urls: List<String>): String {
+        val s = current()
+        val resp: JobIdResponse = httpClient.post(
+            urlOf(s.serverUrl, "/api/libraries/$libraryId/downloaders/$name/run")
+        ) {
+            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            contentType(ContentType.Application.Json)
+            setBody(UrlsBody(urls))
+        }.body()
+        return resp.job_id
+    }
+
+    suspend fun getDownloaderJob(libraryId: Long, jobId: String): DownloaderJob {
+        val s = current()
+        return httpClient.get(
+            urlOf(s.serverUrl, "/api/libraries/$libraryId/downloaders/jobs/$jobId")
+        ) {
             if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
         }.body()
     }
@@ -199,3 +227,9 @@ private data class TrackIdsBody(val track_ids: List<Long>)
 
 @Serializable
 private data class TagBody(val namespace: String, val value: String)
+
+@Serializable
+private data class UrlsBody(val urls: List<String>)
+
+@Serializable
+private data class JobIdResponse(val job_id: String)

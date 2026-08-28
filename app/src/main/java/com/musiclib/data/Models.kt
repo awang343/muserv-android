@@ -13,7 +13,8 @@ data class Library(
 data class Track(
     val id: Long,
     val library_id: Long = 0,
-    val path: String,
+    val hash: String? = null,
+    val original_filename: String? = null,
     val title: String? = null,
     val album: String? = null,
     val artist: String? = null,
@@ -27,7 +28,7 @@ data class Track(
     val channels: Long? = null,
     val added_at: Long = 0,
 ) {
-    val displayTitle: String get() = title ?: path.substringAfterLast('/')
+    val displayTitle: String get() = title ?: original_filename ?: "(untitled)"
     val displayArtist: String get() = artist ?: album_artist ?: "—"
     val displayAlbum: String get() = album ?: "—"
 }
@@ -65,19 +66,45 @@ data class TrackTag(
 )
 
 @Serializable
-data class ScanState(
+data class ImportState(
     val running: Boolean,
     val started_at: Long? = null,
     val finished_at: Long? = null,
-    val last_stats: ScanStats? = null,
+    val last_stats: ImportStats? = null,
     val last_error: String? = null,
 )
 
 @Serializable
-data class ScanStats(
-    val seen: Long,
-    val inserted: Long,
-    val updated: Long,
-    val unchanged: Long,
+data class ImportStats(
+    val scanned: Long,
+    val imported: Long,
+    val duplicates: Long,
+    val failed: Long,
+)
+
+@Serializable
+data class DownloaderInfo(
+    val name: String,
+)
+
+@Serializable
+data class DownloaderJob(
+    val id: String,
+    val library_id: Long,
+    val script: String,
+    val urls: List<String>,
+    val current_index: Long? = null,
+    val status: String,
+    val log: List<String> = emptyList(),
+    val summary: DownloaderSummary? = null,
+    val started_at: String,
+    val finished_at: String? = null,
+)
+
+@Serializable
+data class DownloaderSummary(
+    val scanned: Long,
+    val imported: Long,
+    val duplicates: Long,
     val failed: Long,
 )

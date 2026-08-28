@@ -262,7 +262,6 @@ private fun PlaylistTrackRow(
 
 private fun PlaylistTrack.toTrack() = Track(
     id = track_id,
-    path = "",
     title = title,
     album = album,
     artist = artist,

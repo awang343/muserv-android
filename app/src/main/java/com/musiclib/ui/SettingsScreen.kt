@@ -33,9 +33,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.musiclib.data.ImportState
 import com.musiclib.data.Library
 import com.musiclib.data.MusicApi
-import com.musiclib.data.ScanState
 import com.musiclib.data.Settings
 import com.musiclib.data.SettingsRepository
 import kotlinx.coroutines.Job
@@ -50,6 +50,7 @@ fun SettingsScreen(
     api: MusicApi,
     onSaved: () -> Unit,
     onBack: (() -> Unit)? = null,
+    onOpenDownloaders: (() -> Unit)? = null,
 ) {
     var url by rememberSaveable { mutableStateOf("") }
     var token by rememberSaveable { mutableStateOf("") }
@@ -62,8 +63,8 @@ fun SettingsScreen(
     var libsLoading by remember { mutableStateOf(false) }
     var libsError by remember { mutableStateOf<String?>(null) }
 
-    var scanState by remember { mutableStateOf<ScanState?>(null) }
-    var scanMessage by remember { mutableStateOf<String?>(null) }
+    var importState by remember { mutableStateOf<ImportState?>(null) }
+    var importMessage by remember { mutableStateOf<String?>(null) }
     var pollJob by remember { mutableStateOf<Job?>(null) }
 
     LaunchedEffect(Unit) {
@@ -117,16 +118,16 @@ fun SettingsScreen(
             while (true) {
                 delay(1500)
                 val s = try {
-                    api.getScanStatus(libraryId)
+                    api.getImportStatus(libraryId)
                 } catch (e: Throwable) {
-                    scanMessage = "status failed: ${e.message}"
+                    importMessage = "status failed: ${e.message}"
                     return@launch
                 }
-                scanState = s
+                importState = s
                 if (!s.running) {
-                    scanMessage = s.last_error?.let { "scan failed: $it" } ?: s.last_stats?.let {
-                        "scan done — seen=${it.seen} +${it.inserted} ~${it.updated} =${it.unchanged} fail=${it.failed}"
-                    } ?: "scan done"
+                    importMessage = s.last_error?.let { "import failed: $it" } ?: s.last_stats?.let {
+                        "import done — scanned=${it.scanned} +${it.imported} dup=${it.duplicates} fail=${it.failed}"
+                    } ?: "import done"
                     return@launch
                 }
             }
@@ -235,29 +236,29 @@ fun SettingsScreen(
             HorizontalDivider()
             Spacer(Modifier.height(8.dp))
 
-            val running = scanState?.running == true
+            val running = importState?.running == true
             OutlinedButton(
                 onClick = {
-                    scanMessage = null
+                    importMessage = null
                     val lib = selectedLibraryId
                     if (lib <= 0) {
-                        scanMessage = "pick a library first"
+                        importMessage = "pick a library first"
                         return@OutlinedButton
                     }
                     scope.launch {
                         try {
-                            val s = api.triggerScan(lib)
-                            scanState = s
-                            scanMessage = if (s.running) "rescanning…" else "scan triggered"
+                            val s = api.triggerImport(lib)
+                            importState = s
+                            importMessage = if (s.running) "importing…" else "import triggered"
                             if (s.running) startPolling(lib)
                         } catch (e: Throwable) {
                             try {
-                                val s = api.getScanStatus(lib)
-                                scanState = s
-                                scanMessage = if (s.running) "already running" else "scan: ${e.message}"
+                                val s = api.getImportStatus(lib)
+                                importState = s
+                                importMessage = if (s.running) "already running" else "import: ${e.message}"
                                 if (s.running) startPolling(lib)
                             } catch (_: Throwable) {
-                                scanMessage = "scan: ${e.message}"
+                                importMessage = "import: ${e.message}"
                             }
                         }
                     }
@@ -266,13 +267,25 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    if (running) "Rescanning $selectedLibraryName…"
-                    else "Rescan ${selectedLibraryName.ifBlank { "library" }}"
+                    if (running) "Importing $selectedLibraryName…"
+                    else "Import ${selectedLibraryName.ifBlank { "library" }}"
                 )
             }
 
-            scanMessage?.let {
+            importMessage?.let {
                 Text(it, style = MaterialTheme.typography.bodyMedium)
+            }
+
+            if (onOpenDownloaders != null) {
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = onOpenDownloaders,
+                    enabled = url.isNotBlank() && selectedLibraryId > 0,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Downloaders") }
             }
         }
     }

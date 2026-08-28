@@ -161,6 +161,16 @@ fun AppRoot(
                         }
                     },
                     onBack = null,
+                    onOpenDownloaders = { nav.navigate("downloaders") },
+                )
+            }
+            composable("downloaders") {
+                val s by container.settings.flow.collectAsState(initial = null)
+                val libraryId = s?.selectedLibraryId ?: 0L
+                DownloadersScreen(
+                    container = container,
+                    libraryId = libraryId,
+                    onBack = { nav.popBackStack() },
                 )
             }
         }
