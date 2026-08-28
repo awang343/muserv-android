@@ -13,11 +13,13 @@ import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import com.musiclib.data.MusicApi
+import com.musiclib.data.SettingsRepository
 import com.musiclib.data.Track
 import com.musiclib.playback.PlaybackService
 import com.musiclib.playback.PlayerHolder
 import com.musiclib.ui.AppRoot
 import com.musiclib.ui.MusicLibTheme
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -31,6 +33,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val container = (application as MusicLibApp).container
             val api = container.api
+            val settings = container.settings
 
             MusicLibTheme {
                 AppRoot(
@@ -38,25 +41,25 @@ class MainActivity : ComponentActivity() {
                     player = player,
                     onPlay = { track ->
                         lifecycleScope.launch {
-                            val item = mediaItem(track, api)
+                            val item = mediaItem(track, api, settings)
                             player.playNow(item)
                         }
                     },
                     onPlayList = { tracks, startIndex ->
                         lifecycleScope.launch {
-                            val items = tracks.map { mediaItem(it, api) }
+                            val items = tracks.map { mediaItem(it, api, settings) }
                             player.playFromList(items, startIndex)
                         }
                     },
                     onEnqueue = { track ->
                         lifecycleScope.launch {
-                            val item = mediaItem(track, api)
+                            val item = mediaItem(track, api, settings)
                             player.enqueue(item)
                         }
                     },
                     onEnqueueAll = { tracks ->
                         lifecycleScope.launch {
-                            val items = tracks.map { mediaItem(it, api) }
+                            val items = tracks.map { mediaItem(it, api, settings) }
                             player.enqueueAll(items)
                         }
                     },
@@ -65,8 +68,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private suspend fun mediaItem(track: Track, api: MusicApi): MediaItem {
-        val url = api.streamUrlFor(track.id)
+    private suspend fun mediaItem(track: Track, api: MusicApi, settings: SettingsRepository): MediaItem {
+        val libraryId = settings.flow.first().selectedLibraryId
+        val url = api.streamUrlFor(libraryId, track.id)
         return MediaItem.Builder()
             .setUri(url)
             .setMediaId(track.id.toString())

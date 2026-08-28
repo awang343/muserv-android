@@ -222,7 +222,7 @@ fun SettingsScreen(
                             Column(modifier = Modifier.padding(start = 4.dp)) {
                                 Text(lib.name, style = MaterialTheme.typography.bodyLarge)
                                 Text(
-                                    lib.root_path,
+                                    lib.path,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )

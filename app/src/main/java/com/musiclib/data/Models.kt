@@ -6,13 +6,12 @@ import kotlinx.serialization.Serializable
 data class Library(
     val id: Long,
     val name: String,
-    val root_path: String,
+    val path: String,
 )
 
 @Serializable
 data class Track(
     val id: Long,
-    val library_id: Long = 0,
     val hash: String? = null,
     val original_filename: String? = null,
     val title: String? = null,
@@ -36,7 +35,6 @@ data class Track(
 @Serializable
 data class Playlist(
     val id: Long,
-    val library_id: Long = 0,
     val name: String,
     val description: String? = null,
     val track_count: Long = 0,
@@ -90,7 +88,6 @@ data class DownloaderInfo(
 @Serializable
 data class DownloaderJob(
     val id: String,
-    val library_id: Long,
     val script: String,
     val urls: List<String>,
     val current_index: Long? = null,

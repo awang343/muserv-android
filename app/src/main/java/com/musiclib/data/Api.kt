@@ -162,10 +162,9 @@ class MusicApi(private val settings: SettingsRepository) {
         }
     }
 
-    /** Stream URL doesn't require a library id — track ids are globally unique. */
-    suspend fun streamUrlFor(trackId: Long): String {
+    suspend fun streamUrlFor(libraryId: Long, trackId: Long): String {
         val s = current()
-        return urlOf(s.serverUrl, "/api/tracks/$trackId/stream")
+        return urlOf(s.serverUrl, "/api/libraries/$libraryId/tracks/$trackId/stream")
     }
 
     suspend fun authHeader(): String? {
