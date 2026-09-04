@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -141,6 +142,7 @@ fun PlaylistsListScreen(
     container: AppContainer,
     libraryId: Long,
     onOpen: (Long) -> Unit,
+    onMenuClick: (() -> Unit)? = null,
 ) {
     val vm: PlaylistsListViewModel = viewModel(
         key = "playlists-$libraryId",
@@ -157,7 +159,18 @@ fun PlaylistsListScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = { TopAppBar(title = { Text("Playlists") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Playlists") },
+                navigationIcon = {
+                    if (onMenuClick != null) {
+                        IconButton(onClick = onMenuClick) {
+                            Icon(Icons.Default.Menu, contentDescription = "Open menu")
+                        }
+                    }
+                },
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(onClick = { showCreate = true }) {
                 Icon(Icons.Default.Add, contentDescription = "New playlist")

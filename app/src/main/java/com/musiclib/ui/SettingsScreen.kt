@@ -12,8 +12,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -48,7 +52,7 @@ fun SettingsScreen(
     api: MusicApi,
     onSaved: () -> Unit,
     onBack: (() -> Unit)? = null,
-    onManageDownloads: (() -> Unit)? = null,
+    onMenuClick: (() -> Unit)? = null,
 ) {
     var url by rememberSaveable { mutableStateOf("") }
     var token by rememberSaveable { mutableStateOf("") }
@@ -112,6 +116,10 @@ fun SettingsScreen(
                 navigationIcon = {
                     if (onBack != null) {
                         TextButton(onClick = onBack) { Text("Back") }
+                    } else if (onMenuClick != null) {
+                        IconButton(onClick = onMenuClick) {
+                            Icon(Icons.Default.Menu, contentDescription = "Open menu")
+                        }
                     }
                 },
             )
@@ -228,22 +236,6 @@ fun SettingsScreen(
                         scope.launch { repo.setWifiOnlyDownload(it) }
                     },
                 )
-            }
-
-            if (onManageDownloads != null) {
-                Spacer(Modifier.height(8.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onManageDownloads)
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text("Manage Downloads", style = MaterialTheme.typography.bodyLarge)
-                }
             }
         }
     }

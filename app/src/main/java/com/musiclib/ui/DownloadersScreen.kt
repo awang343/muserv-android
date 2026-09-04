@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,6 +53,7 @@ fun DownloadersScreen(
     container: AppContainer,
     libraryId: Long,
     onBack: (() -> Unit)? = null,
+    onMenuClick: (() -> Unit)? = null,
 ) {
     val vm: DownloadersViewModel = viewModel(
         key = "downloaders-$libraryId",
@@ -77,6 +79,10 @@ fun DownloadersScreen(
                     if (onBack != null) {
                         IconButton(onClick = onBack) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    } else if (onMenuClick != null) {
+                        IconButton(onClick = onMenuClick) {
+                            Icon(Icons.Default.Menu, contentDescription = "Open menu")
                         }
                     }
                 },

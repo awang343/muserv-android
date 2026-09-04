@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
@@ -90,6 +91,7 @@ class MainActivity : ComponentActivity() {
             .build()
     }
 
+    @UnstableApi
     override fun onStart() {
         super.onStart()
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))

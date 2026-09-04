@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,7 +40,7 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun QueueScreen(player: PlayerHolder) {
+fun QueueScreen(player: PlayerHolder, onMenuClick: (() -> Unit)? = null) {
     val queue by player.queue.collectAsState()
     val current by player.current.collectAsState()
 
@@ -53,6 +54,13 @@ fun QueueScreen(player: PlayerHolder) {
         topBar = {
             TopAppBar(
                 title = { Text("Queue (${queue.size})") },
+                navigationIcon = {
+                    if (onMenuClick != null) {
+                        IconButton(onClick = onMenuClick) {
+                            Icon(Icons.Default.Menu, contentDescription = "Open menu")
+                        }
+                    }
+                },
                 actions = {
                     IconButton(
                         onClick = { player.shuffleQueue() },

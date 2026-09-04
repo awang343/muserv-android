@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.text.input.ImeAction
@@ -63,6 +64,7 @@ fun SongsScreen(
     onEnqueue: (Track) -> Unit,
     onEnqueueAll: (List<Track>) -> Unit,
     container: AppContainer,
+    onMenuClick: (() -> Unit)? = null,
 ) {
     val state by viewModel.state.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
@@ -142,6 +144,13 @@ fun SongsScreen(
             } else {
                 TopAppBar(
                     title = { Text("Songs") },
+                    navigationIcon = {
+                        if (onMenuClick != null) {
+                            IconButton(onClick = onMenuClick) {
+                                Icon(Icons.Default.Menu, contentDescription = "Open menu")
+                            }
+                        }
+                    },
                     actions = {
                         IconButton(onClick = { sortOpen = true }) {
                             Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
@@ -156,19 +165,6 @@ fun SongsScreen(
                             enabled = (state as? SongsUiState.Ready)?.tracks?.isNotEmpty() == true,
                         ) {
                             Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = "Add all to queue")
-                        }
-                        IconButton(
-                            onClick = {
-                                val s = state
-                                if (s is SongsUiState.Ready) {
-                                    scope.launch {
-                                        container.downloadRepository.downloadTracks(libraryId, s.tracks)
-                                    }
-                                }
-                            },
-                            enabled = (state as? SongsUiState.Ready)?.tracks?.isNotEmpty() == true,
-                        ) {
-                            Icon(Icons.Default.Download, contentDescription = "Download all visible")
                         }
                         IconButton(onClick = { searchMode = true }) {
                             Icon(Icons.Default.Search, contentDescription = "Tag search")
