@@ -112,7 +112,7 @@ fun AppRoot(
                 val vm: SongsViewModel = viewModel(
                     key = "songs-$libraryId",
                     factory = viewModelFactory {
-                        initializer { SongsViewModel(container.api, libraryId) }
+                        initializer { SongsViewModel(container.api, container.database.cacheDao(), libraryId) }
                     },
                 )
                 SongsScreen(
@@ -163,6 +163,16 @@ fun AppRoot(
                         }
                     },
                     onBack = null,
+                    onManageDownloads = { nav.navigate("downloads") },
+                )
+            }
+            composable("downloads") {
+                val s by container.settings.flow.collectAsState(initial = null)
+                val libraryId = s?.selectedLibraryId ?: 0L
+                DownloadsScreen(
+                    container = container,
+                    libraryId = libraryId,
+                    onBack = { nav.popBackStack() },
                 )
             }
             composable("downloaders") {

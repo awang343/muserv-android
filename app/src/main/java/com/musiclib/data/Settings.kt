@@ -2,6 +2,7 @@ package com.musiclib.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -18,6 +19,8 @@ data class Settings(
     val selectedLibraryName: String,
     /** Cached id for the selected library on this server. 0 means unresolved. */
     val selectedLibraryId: Long,
+    /** When true, downloads only proceed on unmetered (Wi-Fi) networks. */
+    val wifiOnlyDownload: Boolean = true,
 ) {
     /** True once server URL is set AND a library is resolved. */
     val isConfigured: Boolean get() = serverUrl.isNotBlank() && selectedLibraryId > 0
@@ -29,6 +32,7 @@ class SettingsRepository(private val context: Context) {
         val AUTH_TOKEN: Preferences.Key<String> = stringPreferencesKey("auth_token")
         val SELECTED_LIBRARY_NAME: Preferences.Key<String> = stringPreferencesKey("selected_library_name")
         val SELECTED_LIBRARY_ID: Preferences.Key<Long> = longPreferencesKey("selected_library_id")
+        val WIFI_ONLY_DOWNLOAD: Preferences.Key<Boolean> = booleanPreferencesKey("wifi_only_download")
     }
 
     val flow: Flow<Settings> = context.dataStore.data.map { prefs ->
@@ -37,6 +41,7 @@ class SettingsRepository(private val context: Context) {
             authToken = prefs[Keys.AUTH_TOKEN].orEmpty(),
             selectedLibraryName = prefs[Keys.SELECTED_LIBRARY_NAME].orEmpty(),
             selectedLibraryId = prefs[Keys.SELECTED_LIBRARY_ID] ?: 0L,
+            wifiOnlyDownload = prefs[Keys.WIFI_ONLY_DOWNLOAD] ?: true,
         )
     }
 
@@ -46,6 +51,13 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.AUTH_TOKEN] = settings.authToken.trim()
             prefs[Keys.SELECTED_LIBRARY_NAME] = settings.selectedLibraryName.trim()
             prefs[Keys.SELECTED_LIBRARY_ID] = settings.selectedLibraryId
+            prefs[Keys.WIFI_ONLY_DOWNLOAD] = settings.wifiOnlyDownload
+        }
+    }
+
+    suspend fun setWifiOnlyDownload(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.WIFI_ONLY_DOWNLOAD] = enabled
         }
     }
 

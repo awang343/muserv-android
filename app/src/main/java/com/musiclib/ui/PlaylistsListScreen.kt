@@ -48,13 +48,17 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.musiclib.data.AppContainer
 import com.musiclib.data.MusicApi
 import com.musiclib.data.Playlist
+import com.musiclib.data.db.CacheDao
+import com.musiclib.data.db.PlaylistEntity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class PlaylistsListViewModel(
     private val api: MusicApi,
+    private val cacheDao: CacheDao,
     private val libraryId: Long,
 ) : ViewModel() {
     private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
@@ -62,6 +66,9 @@ class PlaylistsListViewModel(
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+
+    private val _offline = MutableStateFlow(false)
+    val offline: StateFlow<Boolean> = _offline.asStateFlow()
 
     init {
         refresh()
@@ -74,10 +81,20 @@ class PlaylistsListViewModel(
         }
         viewModelScope.launch {
             try {
-                _playlists.value = api.listPlaylists(libraryId)
+                val playlists = api.listPlaylists(libraryId)
+                cacheDao.replacePlaylists(libraryId, playlists.map { PlaylistEntity.from(libraryId, it) })
+                _playlists.value = playlists
+                _offline.value = false
                 _error.value = null
             } catch (t: Throwable) {
-                _error.value = t.message ?: t.javaClass.simpleName
+                val cached = cacheDao.playlistsForLibrary(libraryId).first().map { it.toPlaylist() }
+                if (cached.isNotEmpty()) {
+                    _playlists.value = cached
+                    _offline.value = true
+                    _error.value = null
+                } else {
+                    _error.value = t.message ?: t.javaClass.simpleName
+                }
             }
         }
     }
@@ -128,11 +145,12 @@ fun PlaylistsListScreen(
     val vm: PlaylistsListViewModel = viewModel(
         key = "playlists-$libraryId",
         factory = viewModelFactory {
-            initializer { PlaylistsListViewModel(container.api, libraryId) }
+            initializer { PlaylistsListViewModel(container.api, container.database.cacheDao(), libraryId) }
         },
     )
     val playlists by vm.playlists.collectAsState()
     val error by vm.error.collectAsState()
+    val offline by vm.offline.collectAsState()
     var showCreate by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<Playlist?>(null) }
     var renameTarget by remember { mutableStateOf<Playlist?>(null) }
@@ -146,7 +164,11 @@ fun PlaylistsListScreen(
             }
         },
     ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+        if (offline) {
+            OfflineBanner()
+        }
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (error != null && playlists.isEmpty()) {
                 Text(
                     error ?: "",
@@ -173,6 +195,7 @@ fun PlaylistsListScreen(
                     }
                 }
             }
+        }
         }
     }
 

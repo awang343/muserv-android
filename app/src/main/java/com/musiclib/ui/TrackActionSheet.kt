@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,16 +26,21 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.musiclib.data.Track
+import com.musiclib.data.db.DownloadEntity
+import com.musiclib.data.db.DownloadStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrackActionSheet(
     track: Track,
+    download: DownloadEntity?,
     onDismiss: () -> Unit,
     onPlay: () -> Unit,
     onEnqueue: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onOpenTags: () -> Unit,
+    onDownload: () -> Unit,
+    onRemoveDownload: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -55,6 +62,19 @@ fun TrackActionSheet(
             ActionItem(Icons.Default.Add, "Add to queue", onEnqueue)
             ActionItem(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to playlist", onAddToPlaylist)
             ActionItem(Icons.Default.LocalOffer, "Tags", onOpenTags)
+            when (download?.status) {
+                DownloadStatus.DOWNLOADED ->
+                    ActionItem(Icons.Default.Delete, "Remove download", onRemoveDownload)
+                DownloadStatus.DOWNLOADING -> {
+                    val pct = if (download.totalBytes > 0) {
+                        (download.bytesDownloaded * 100 / download.totalBytes).toInt()
+                    } else 0
+                    ActionItem(Icons.Default.Download, "Downloading… $pct%", {})
+                }
+                DownloadStatus.QUEUED -> ActionItem(Icons.Default.Download, "Queued…", {})
+                DownloadStatus.FAILED -> ActionItem(Icons.Default.Download, "Retry download", onDownload)
+                null -> ActionItem(Icons.Default.Download, "Download track", onDownload)
+            }
         }
     }
 }

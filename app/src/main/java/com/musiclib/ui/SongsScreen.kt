@@ -4,10 +4,12 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -17,6 +19,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.text.input.ImeAction
@@ -45,6 +50,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.musiclib.data.AppContainer
 import com.musiclib.data.Track
+import com.musiclib.data.db.DownloadEntity
+import com.musiclib.data.db.DownloadStatus
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -73,6 +80,10 @@ fun SongsScreen(
     var sortOpen by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
+
+    val downloads by container.downloadRepository.downloadsForLibrary(libraryId)
+        .collectAsState(initial = emptyList())
+    val downloadsByTrackId = remember(downloads) { downloads.associateBy { it.trackId } }
 
     fun runTagSearch() {
         val q = tagQuery.trim()
@@ -146,6 +157,19 @@ fun SongsScreen(
                         ) {
                             Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = "Add all to queue")
                         }
+                        IconButton(
+                            onClick = {
+                                val s = state
+                                if (s is SongsUiState.Ready) {
+                                    scope.launch {
+                                        container.downloadRepository.downloadTracks(libraryId, s.tracks)
+                                    }
+                                }
+                            },
+                            enabled = (state as? SongsUiState.Ready)?.tracks?.isNotEmpty() == true,
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = "Download all visible")
+                        }
                         IconButton(onClick = { searchMode = true }) {
                             Icon(Icons.Default.Search, contentDescription = "Tag search")
                         }
@@ -186,6 +210,7 @@ fun SongsScreen(
                             TrackList(
                                 tracks = sortedResults,
                                 sortKey = currentSort,
+                                downloadsByTrackId = downloadsByTrackId,
                                 onPlay = onPlay,
                                 onLongPress = { actionFor = it },
                             )
@@ -193,6 +218,9 @@ fun SongsScreen(
                     }
                 }
             } else {
+                if ((state as? SongsUiState.Ready)?.offline == true) {
+                    OfflineBanner()
+                }
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
@@ -227,6 +255,7 @@ fun SongsScreen(
                             TrackList(
                                 tracks = visible,
                                 sortKey = currentSort,
+                                downloadsByTrackId = downloadsByTrackId,
                                 onPlay = onPlay,
                                 onLongPress = { actionFor = it },
                             )
@@ -238,23 +267,33 @@ fun SongsScreen(
     }
 
     if (actionFor != null) {
+        val track = actionFor!!
         TrackActionSheet(
-            track = actionFor!!,
+            track = track,
+            download = downloadsByTrackId[track.id],
             onDismiss = { actionFor = null },
             onPlay = {
-                onPlay(actionFor!!)
+                onPlay(track)
                 actionFor = null
             },
             onEnqueue = {
-                onEnqueue(actionFor!!)
+                onEnqueue(track)
                 actionFor = null
             },
             onAddToPlaylist = {
-                pickPlaylistFor = actionFor
+                pickPlaylistFor = track
                 actionFor = null
             },
             onOpenTags = {
-                tagsFor = actionFor
+                tagsFor = track
+                actionFor = null
+            },
+            onDownload = {
+                scope.launch { container.downloadRepository.downloadTrack(libraryId, track) }
+                actionFor = null
+            },
+            onRemoveDownload = {
+                scope.launch { container.downloadRepository.removeDownload(libraryId, track.id) }
                 actionFor = null
             },
         )
@@ -306,6 +345,7 @@ fun SongsScreen(
 private fun TrackList(
     tracks: List<Track>,
     sortKey: SortKey,
+    downloadsByTrackId: Map<Long, DownloadEntity>,
     onPlay: (Track) -> Unit,
     onLongPress: (Track) -> Unit,
 ) {
@@ -315,7 +355,7 @@ private fun TrackList(
     }
     LazyColumn(state = lazyState, modifier = Modifier.fillMaxSize()) {
         items(tracks, key = { it.id }) { t ->
-            TrackRow(t, onPlay = onPlay, onLongPress = onLongPress)
+            TrackRow(t, download = downloadsByTrackId[t.id], onPlay = onPlay, onLongPress = onLongPress)
             HorizontalDivider()
         }
     }
@@ -325,10 +365,11 @@ private fun TrackList(
 @Composable
 private fun TrackRow(
     track: Track,
+    download: DownloadEntity?,
     onPlay: (Track) -> Unit,
     onLongPress: (Track) -> Unit,
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
@@ -336,16 +377,55 @@ private fun TrackRow(
                 onLongClick = { onLongPress(track) },
             )
             .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            track.displayTitle,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                track.displayTitle,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                "${track.displayArtist}  —  ${track.displayAlbum}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        DownloadStatusGlyph(download)
+    }
+}
+
+@Composable
+private fun DownloadStatusGlyph(download: DownloadEntity?) {
+    when (download?.status) {
+        null -> {}
+        DownloadStatus.QUEUED -> Icon(
+            Icons.Default.Download,
+            contentDescription = "Queued for download",
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text(
-            "${track.displayArtist}  —  ${track.displayAlbum}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        DownloadStatus.DOWNLOADING -> {
+            val pct = if (download.totalBytes > 0) {
+                (download.bytesDownloaded * 100 / download.totalBytes).toInt()
+            } else 0
+            Text(
+                "$pct%",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        DownloadStatus.DOWNLOADED -> Icon(
+            Icons.Default.DownloadDone,
+            contentDescription = "Downloaded",
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        DownloadStatus.FAILED -> Icon(
+            Icons.Default.ErrorOutline,
+            contentDescription = "Download failed",
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.error,
         )
     }
 }

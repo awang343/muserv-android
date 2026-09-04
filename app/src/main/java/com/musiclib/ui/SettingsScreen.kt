@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -47,11 +48,13 @@ fun SettingsScreen(
     api: MusicApi,
     onSaved: () -> Unit,
     onBack: (() -> Unit)? = null,
+    onManageDownloads: (() -> Unit)? = null,
 ) {
     var url by rememberSaveable { mutableStateOf("") }
     var token by rememberSaveable { mutableStateOf("") }
     var selectedLibraryName by rememberSaveable { mutableStateOf("") }
     var selectedLibraryId by rememberSaveable { mutableStateOf(0L) }
+    var wifiOnlyDownload by rememberSaveable { mutableStateOf(true) }
     var initialized by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -66,6 +69,7 @@ fun SettingsScreen(
         token = saved.authToken
         selectedLibraryName = saved.selectedLibraryName
         selectedLibraryId = saved.selectedLibraryId
+        wifiOnlyDownload = saved.wifiOnlyDownload
         initialized = true
     }
 
@@ -145,6 +149,7 @@ fun SettingsScreen(
                                 authToken = token,
                                 selectedLibraryName = selectedLibraryName,
                                 selectedLibraryId = selectedLibraryId,
+                                wifiOnlyDownload = wifiOnlyDownload,
                             )
                         )
                         onSaved()
@@ -196,6 +201,48 @@ fun SettingsScreen(
                             }
                         }
                     }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Downloads on Wi-Fi only", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Allow cellular data if turned off",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = wifiOnlyDownload,
+                    onCheckedChange = {
+                        wifiOnlyDownload = it
+                        scope.launch { repo.setWifiOnlyDownload(it) }
+                    },
+                )
+            }
+
+            if (onManageDownloads != null) {
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onManageDownloads)
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("Manage Downloads", style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }

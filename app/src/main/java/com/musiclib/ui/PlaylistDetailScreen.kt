@@ -16,7 +16,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -33,6 +36,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,15 +51,21 @@ import com.musiclib.data.AppContainer
 import com.musiclib.data.MusicApi
 import com.musiclib.data.PlaylistTrack
 import com.musiclib.data.Track
+import com.musiclib.data.db.CacheDao
+import com.musiclib.data.db.DownloadEntity
+import com.musiclib.data.db.DownloadStatus
+import com.musiclib.data.db.PlaylistTrackCrossRef
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
 class PlaylistDetailViewModel(
     private val api: MusicApi,
+    private val cacheDao: CacheDao,
     private val libraryId: Long,
     private val playlistId: Long,
 ) : ViewModel() {
@@ -65,7 +75,29 @@ class PlaylistDetailViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    init { refresh() }
+    private val _offline = MutableStateFlow(false)
+    val offline: StateFlow<Boolean> = _offline.asStateFlow()
+
+    // PlaylistTrack (from the playlist-tracks endpoint) has no hash field, so
+    // downloads need the full Track from the library listing to resolve one.
+    private val _tracksById = MutableStateFlow<Map<Long, Track>>(emptyMap())
+    val tracksById: StateFlow<Map<Long, Track>> = _tracksById.asStateFlow()
+
+    init {
+        refresh()
+        loadFullTracks()
+    }
+
+    private fun loadFullTracks() {
+        if (libraryId <= 0) return
+        viewModelScope.launch {
+            try {
+                _tracksById.value = api.listTracks(libraryId).associateBy { it.id }
+            } catch (_: Throwable) {
+                // Best-effort: downloads are unavailable until this succeeds, playback/reorder still work.
+            }
+        }
+    }
 
     fun refresh() {
         if (libraryId <= 0) {
@@ -74,10 +106,32 @@ class PlaylistDetailViewModel(
         }
         viewModelScope.launch {
             try {
-                _tracks.value = api.getPlaylistTracks(libraryId, playlistId)
+                val tracks = api.getPlaylistTracks(libraryId, playlistId)
+                cacheDao.replacePlaylistTracks(
+                    libraryId,
+                    playlistId,
+                    tracks.map { pt ->
+                        PlaylistTrackCrossRef(
+                            libraryId = libraryId,
+                            playlistId = playlistId,
+                            trackId = pt.track_id,
+                            position = pt.position,
+                            added_at = pt.added_at,
+                        )
+                    },
+                )
+                _tracks.value = tracks
+                _offline.value = false
                 _error.value = null
             } catch (t: Throwable) {
-                _error.value = t.message ?: t.javaClass.simpleName
+                val cached = cacheDao.playlistTracksFor(libraryId, playlistId).first()
+                if (cached.isNotEmpty()) {
+                    _tracks.value = cached
+                    _offline.value = true
+                    _error.value = null
+                } else {
+                    _error.value = t.message ?: t.javaClass.simpleName
+                }
             }
         }
     }
@@ -129,11 +183,22 @@ fun PlaylistDetailScreen(
     val vm: PlaylistDetailViewModel = viewModel(
         key = "playlist-$libraryId-$playlistId",
         factory = viewModelFactory {
-            initializer { PlaylistDetailViewModel(container.api, libraryId, playlistId) }
+            initializer {
+                PlaylistDetailViewModel(container.api, container.database.cacheDao(), libraryId, playlistId)
+            }
         },
     )
     val tracks by vm.tracks.collectAsState()
     val error by vm.error.collectAsState()
+    val offline by vm.offline.collectAsState()
+    val tracksById by vm.tracksById.collectAsState()
+    val scope = rememberCoroutineScope()
+
+    val downloads by container.downloadRepository.downloadsForLibrary(libraryId)
+        .collectAsState(initial = emptyList())
+    val downloadsByTrackId = remember(downloads) { downloads.associateBy { it.trackId } }
+
+    fun fullTrackFor(pt: PlaylistTrack): Track = tracksById[pt.track_id] ?: pt.toTrack()
 
     val lazyState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyState) { from, to ->
@@ -168,11 +233,28 @@ fun PlaylistDetailScreen(
                     ) {
                         Icon(Icons.Default.PlayArrow, contentDescription = "Play all")
                     }
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                container.downloadRepository.downloadTracks(
+                                    libraryId,
+                                    tracks.map { fullTrackFor(it) },
+                                )
+                            }
+                        },
+                        enabled = tracks.isNotEmpty(),
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = "Download playlist")
+                    }
                 },
             )
         },
     ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+        if (offline) {
+            OfflineBanner()
+        }
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when {
                 error != null && tracks.isEmpty() ->
                     Text(error ?: "", modifier = Modifier.align(Alignment.Center).padding(16.dp))
@@ -192,11 +274,22 @@ fun PlaylistDetailScreen(
                             val index = tracks.indexOf(pt)
                             PlaylistTrackRow(
                                 pt = pt,
+                                download = downloadsByTrackId[pt.track_id],
                                 isDragging = isDragging,
                                 dragHandleModifier = Modifier.longPressDraggableHandle(),
                                 onPlay = { if (index >= 0) onPlayPlaylist(tracks.map { it.toTrack() }, index) },
                                 onEnqueue = { onEnqueueTrack(pt.toTrack()) },
                                 onRemove = { vm.removeTrack(pt.track_id) },
+                                onDownload = {
+                                    scope.launch {
+                                        container.downloadRepository.downloadTrack(libraryId, fullTrackFor(pt))
+                                    }
+                                },
+                                onRemoveDownload = {
+                                    scope.launch {
+                                        container.downloadRepository.removeDownload(libraryId, pt.track_id)
+                                    }
+                                },
                             )
                             HorizontalDivider()
                         }
@@ -204,17 +297,21 @@ fun PlaylistDetailScreen(
                 }
             }
         }
+        }
     }
 }
 
 @Composable
 private fun PlaylistTrackRow(
     pt: PlaylistTrack,
+    download: DownloadEntity?,
     isDragging: Boolean,
     dragHandleModifier: Modifier,
     onPlay: () -> Unit,
     onEnqueue: () -> Unit,
     onRemove: () -> Unit,
+    onDownload: () -> Unit,
+    onRemoveDownload: () -> Unit,
 ) {
     val bg = if (isDragging) {
         MaterialTheme.colorScheme.surfaceVariant
@@ -253,9 +350,56 @@ private fun PlaylistTrackRow(
                     modifier = Modifier.size(22.dp),
                 )
             }
+            PlaylistDownloadAction(download = download, onDownload = onDownload, onRemove = onRemoveDownload)
             IconButton(onClick = onRemove) {
                 Icon(Icons.Default.Close, contentDescription = "Remove", modifier = Modifier.size(22.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun PlaylistDownloadAction(
+    download: DownloadEntity?,
+    onDownload: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    when (download?.status) {
+        null -> IconButton(onClick = onDownload) {
+            Icon(Icons.Default.Download, contentDescription = "Download track", modifier = Modifier.size(22.dp))
+        }
+        DownloadStatus.FAILED -> IconButton(onClick = onDownload) {
+            Icon(
+                Icons.Default.ErrorOutline,
+                contentDescription = "Retry download",
+                modifier = Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.error,
+            )
+        }
+        DownloadStatus.QUEUED -> Icon(
+            Icons.Default.Download,
+            contentDescription = "Queued for download",
+            modifier = Modifier.size(22.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        DownloadStatus.DOWNLOADING -> {
+            val pct = if (download.totalBytes > 0) {
+                (download.bytesDownloaded * 100 / download.totalBytes).toInt()
+            } else 0
+            Text(
+                "$pct%",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 8.dp),
+            )
+        }
+        DownloadStatus.DOWNLOADED -> IconButton(onClick = onRemove) {
+            Icon(
+                Icons.Default.DownloadDone,
+                contentDescription = "Remove download",
+                modifier = Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }

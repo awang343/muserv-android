@@ -1,6 +1,7 @@
 package com.musiclib.playback
 
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -35,8 +36,11 @@ class PlaybackService : MediaSessionService() {
             .build()
 
         val httpFactory = OkHttpDataSource.Factory(ok)
+        // Routes file:// to FileDataSource and http(s):// to the OkHttp factory,
+        // so downloaded and streamed tracks play through the same player.
+        val dataSourceFactory = DefaultDataSource.Factory(this, httpFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
-            .setDataSourceFactory(httpFactory)
+            .setDataSourceFactory(dataSourceFactory)
 
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(mediaSourceFactory)

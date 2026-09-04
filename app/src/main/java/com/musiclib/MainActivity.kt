@@ -12,9 +12,9 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
-import com.musiclib.data.MusicApi
-import com.musiclib.data.SettingsRepository
+import com.musiclib.data.AppContainer
 import com.musiclib.data.Track
+import com.musiclib.data.db.DownloadStatus
 import com.musiclib.playback.PlaybackService
 import com.musiclib.playback.PlayerHolder
 import com.musiclib.ui.AppRoot
@@ -32,8 +32,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val container = (application as MusicLibApp).container
-            val api = container.api
-            val settings = container.settings
 
             MusicLibTheme {
                 AppRoot(
@@ -41,25 +39,25 @@ class MainActivity : ComponentActivity() {
                     player = player,
                     onPlay = { track ->
                         lifecycleScope.launch {
-                            val item = mediaItem(track, api, settings)
+                            val item = mediaItem(track, container)
                             player.playNow(item)
                         }
                     },
                     onPlayList = { tracks, startIndex ->
                         lifecycleScope.launch {
-                            val items = tracks.map { mediaItem(it, api, settings) }
+                            val items = tracks.map { mediaItem(it, container) }
                             player.playFromList(items, startIndex)
                         }
                     },
                     onEnqueue = { track ->
                         lifecycleScope.launch {
-                            val item = mediaItem(track, api, settings)
+                            val item = mediaItem(track, container)
                             player.enqueue(item)
                         }
                     },
                     onEnqueueAll = { tracks ->
                         lifecycleScope.launch {
-                            val items = tracks.map { mediaItem(it, api, settings) }
+                            val items = tracks.map { mediaItem(it, container) }
                             player.enqueueAll(items)
                         }
                     },
@@ -68,11 +66,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private suspend fun mediaItem(track: Track, api: MusicApi, settings: SettingsRepository): MediaItem {
-        val libraryId = settings.flow.first().selectedLibraryId
-        val url = api.streamUrlFor(libraryId, track.id)
+    private suspend fun mediaItem(track: Track, container: AppContainer): MediaItem {
+        val libraryId = container.settings.flow.first().selectedLibraryId
+        val download = container.database.downloadDao().get(libraryId, track.id)
+        val uri = if (download?.status == DownloadStatus.DOWNLOADED &&
+            download.localPath != null &&
+            java.io.File(download.localPath).exists()
+        ) {
+            "file://${download.localPath}"
+        } else {
+            container.api.streamUrlFor(libraryId, track.id)
+        }
         return MediaItem.Builder()
-            .setUri(url)
+            .setUri(uri)
             .setMediaId(track.id.toString())
             .setMediaMetadata(
                 MediaMetadata.Builder()
