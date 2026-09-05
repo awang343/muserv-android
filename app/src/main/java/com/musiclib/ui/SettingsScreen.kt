@@ -55,6 +55,7 @@ fun SettingsScreen(
     onMenuClick: (() -> Unit)? = null,
 ) {
     var url by rememberSaveable { mutableStateOf("") }
+    var username by rememberSaveable { mutableStateOf("") }
     var token by rememberSaveable { mutableStateOf("") }
     var selectedLibraryName by rememberSaveable { mutableStateOf("") }
     var selectedLibraryId by rememberSaveable { mutableStateOf(0L) }
@@ -70,7 +71,8 @@ fun SettingsScreen(
         if (initialized) return@LaunchedEffect
         val saved = repo.flow.first()
         url = saved.serverUrl
-        token = saved.authToken
+        username = saved.username
+        token = saved.token
         selectedLibraryName = saved.selectedLibraryName
         selectedLibraryId = saved.selectedLibraryId
         wifiOnlyDownload = saved.wifiOnlyDownload
@@ -81,7 +83,7 @@ fun SettingsScreen(
         libsLoading = true
         libsError = null
         try {
-            val list = api.listLibraries()
+            val list = api.listLibraries(url, username, token)
             libraries = list
             // Reconcile current selection.
             val match = list.firstOrNull { it.name == selectedLibraryName }
@@ -101,8 +103,8 @@ fun SettingsScreen(
         }
     }
 
-    // Fetch libraries whenever the URL/token changes (after they're loaded).
-    LaunchedEffect(initialized, url, token) {
+    // Fetch libraries whenever the URL/username/token changes (after they're loaded).
+    LaunchedEffect(initialized, url, username, token) {
         if (!initialized) return@LaunchedEffect
         if (url.isBlank()) return@LaunchedEffect
         refreshLibraries()
@@ -142,9 +144,16 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = { Text("Username (optional)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
                 value = token,
                 onValueChange = { token = it },
-                label = { Text("Auth token (optional)") },
+                label = { Text("Token (optional)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -154,7 +163,8 @@ fun SettingsScreen(
                         repo.save(
                             Settings(
                                 serverUrl = url,
-                                authToken = token,
+                                username = username,
+                                token = token,
                                 selectedLibraryName = selectedLibraryName,
                                 selectedLibraryId = selectedLibraryId,
                                 wifiOnlyDownload = wifiOnlyDownload,

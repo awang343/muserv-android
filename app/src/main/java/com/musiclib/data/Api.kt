@@ -5,7 +5,7 @@ import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.request.bearerAuth
+import io.ktor.client.request.basicAuth
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
@@ -19,6 +19,7 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import okhttp3.Credentials
 
 class MusicApi(private val settings: SettingsRepository) {
 
@@ -42,24 +43,23 @@ class MusicApi(private val settings: SettingsRepository) {
         return if (path.startsWith('/')) "$b$path" else "$b/$path"
     }
 
-    suspend fun listLibraries(): List<Library> {
-        val s = current()
-        return httpClient.get(urlOf(s.serverUrl, "/api/libraries")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+    suspend fun listLibraries(serverUrl: String, username: String, token: String): List<Library> {
+        return httpClient.get(urlOf(serverUrl, "/api/libraries")) {
+            if (username.isNotBlank() && token.isNotBlank()) basicAuth(username, token)
         }.body()
     }
 
     suspend fun listTracks(libraryId: Long): List<Track> {
         val s = current()
         return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/tracks?limit=1000")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
         }.body()
     }
 
     suspend fun searchTracks(libraryId: Long, query: String): List<Track> {
         val s = current()
         return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/search")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
             parameter("q", query)
         }.body()
     }
@@ -67,14 +67,14 @@ class MusicApi(private val settings: SettingsRepository) {
     suspend fun listPlaylists(libraryId: Long): List<Playlist> {
         val s = current()
         return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
         }.body()
     }
 
     suspend fun createPlaylist(libraryId: Long, name: String): Playlist {
         val s = current()
         return httpClient.post(urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
             contentType(ContentType.Application.Json)
             setBody(NameBody(name))
         }.body()
@@ -83,7 +83,7 @@ class MusicApi(private val settings: SettingsRepository) {
     suspend fun renamePlaylist(libraryId: Long, id: Long, name: String): Playlist {
         val s = current()
         return httpClient.patch(urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists/$id")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
             contentType(ContentType.Application.Json)
             setBody(NameBody(name))
         }.body()
@@ -92,14 +92,14 @@ class MusicApi(private val settings: SettingsRepository) {
     suspend fun deletePlaylist(libraryId: Long, id: Long) {
         val s = current()
         httpClient.delete(urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists/$id")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
         }
     }
 
     suspend fun getPlaylistTracks(libraryId: Long, id: Long): List<PlaylistTrack> {
         val s = current()
         return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists/$id/tracks")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
         }.body()
     }
 
@@ -108,14 +108,14 @@ class MusicApi(private val settings: SettingsRepository) {
         return httpClient.get(
             urlOf(s.serverUrl, "/api/libraries/$libraryId/tracks/$trackId/playlists")
         ) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
         }.body()
     }
 
     suspend fun addToPlaylist(libraryId: Long, playlistId: Long, trackId: Long) {
         val s = current()
         httpClient.post(urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists/$playlistId/tracks")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
             contentType(ContentType.Application.Json)
             setBody(TrackIdBody(trackId))
         }
@@ -126,14 +126,14 @@ class MusicApi(private val settings: SettingsRepository) {
         httpClient.delete(
             urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists/$playlistId/tracks/$trackId")
         ) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
         }
     }
 
     suspend fun setPlaylistTracks(libraryId: Long, playlistId: Long, trackIds: List<Long>) {
         val s = current()
         httpClient.put(urlOf(s.serverUrl, "/api/libraries/$libraryId/playlists/$playlistId/tracks")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
             contentType(ContentType.Application.Json)
             setBody(TrackIdsBody(trackIds))
         }
@@ -142,14 +142,14 @@ class MusicApi(private val settings: SettingsRepository) {
     suspend fun listTrackTags(libraryId: Long, trackId: Long): List<TrackTag> {
         val s = current()
         return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/tracks/$trackId/tags")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
         }.body()
     }
 
     suspend fun addUserTag(libraryId: Long, trackId: Long, namespace: String, value: String) {
         val s = current()
         httpClient.post(urlOf(s.serverUrl, "/api/libraries/$libraryId/tracks/$trackId/tags")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
             contentType(ContentType.Application.Json)
             setBody(TagBody(namespace, value))
         }
@@ -158,7 +158,7 @@ class MusicApi(private val settings: SettingsRepository) {
     suspend fun removeUserTag(libraryId: Long, trackId: Long, tagId: Long) {
         val s = current()
         httpClient.delete(urlOf(s.serverUrl, "/api/libraries/$libraryId/tracks/$trackId/tags/$tagId")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
         }
     }
 
@@ -169,13 +169,17 @@ class MusicApi(private val settings: SettingsRepository) {
 
     suspend fun authHeader(): String? {
         val s = current()
-        return if (s.authToken.isBlank()) null else "Bearer ${s.authToken}"
+        return if (s.username.isBlank() || s.token.isBlank()) {
+            null
+        } else {
+            Credentials.basic(s.username, s.token)
+        }
     }
 
     suspend fun listDownloaders(libraryId: Long): List<DownloaderInfo> {
         val s = current()
         return httpClient.get(urlOf(s.serverUrl, "/api/libraries/$libraryId/downloaders")) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
         }.body()
     }
 
@@ -184,7 +188,7 @@ class MusicApi(private val settings: SettingsRepository) {
         val resp: JobIdResponse = httpClient.post(
             urlOf(s.serverUrl, "/api/libraries/$libraryId/downloaders/$name/run")
         ) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
             contentType(ContentType.Application.Json)
             setBody(UrlsBody(urls))
         }.body()
@@ -196,7 +200,7 @@ class MusicApi(private val settings: SettingsRepository) {
         return httpClient.get(
             urlOf(s.serverUrl, "/api/libraries/$libraryId/downloaders/jobs/$jobId")
         ) {
-            if (s.authToken.isNotBlank()) bearerAuth(s.authToken)
+            if (s.username.isNotBlank() && s.token.isNotBlank()) basicAuth(s.username, s.token)
         }.body()
     }
 }

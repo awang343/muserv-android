@@ -10,6 +10,7 @@ import androidx.media3.session.MediaSessionService
 import com.musiclib.MusicLibApp
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import okhttp3.Credentials
 import okhttp3.OkHttpClient
 
 @UnstableApi
@@ -21,16 +22,21 @@ class PlaybackService : MediaSessionService() {
         super.onCreate()
         val app = application as MusicLibApp
 
-        // Read auth token fresh per-request so token changes (Settings save)
-        // take effect without restarting the service.
+        // Read credentials fresh per-request so changes (Settings save) take
+        // effect without restarting the service.
         val ok = OkHttpClient.Builder()
             .addInterceptor { chain ->
                 val req = chain.request()
-                val token = runBlocking {
-                    app.container.settings.flow.first().authToken
+                val settings = runBlocking {
+                    app.container.settings.flow.first()
                 }
-                val authed = if (token.isBlank()) req
-                else req.newBuilder().header("Authorization", "Bearer $token").build()
+                val authed = if (settings.username.isBlank() || settings.token.isBlank()) {
+                    req
+                } else {
+                    req.newBuilder()
+                        .header("Authorization", Credentials.basic(settings.username, settings.token))
+                        .build()
+                }
                 chain.proceed(authed)
             }
             .build()
